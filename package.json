@@ -1,0 +1,27 @@
+{
+  "name": "mtks-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for MTKS trading",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.12.2",
+    "@waves/waves-transactions": "^4.2.3",
+    "axios": "^1.6.2"
+  }
+}{
+  "name": "mtks-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for MTKS trading",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.12.2",
+    "@waves/waves-transactions": "^4.2.3",
+    "axios": "^1.6.2"
+  }
+}
