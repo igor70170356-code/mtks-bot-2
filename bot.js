@@ -1,6 +1,5 @@
 const { Telegraf } = require('telegraf');
-const { invokeScript } = require('@waves/waves-transactions');
-const axios = require('axios');
+
 
 // ========== КОНФИГУРАЦИЯ ==========
 const BOT_TOKEN = '8447787179:AAG-CQc7pJ7NJScnavBCZJ9aFbCBaW80SbM';
@@ -107,3 +106,15 @@ bot.help((ctx) => ctx.reply(
 
 bot.launch();
 console.log('Бот запущен!');
+
+const BOT_TOKEN = '8447787179:AAG-CQc7pJ7NJScnavBCZJ9aFbCBaW80SbM';
+
+const bot = new Telegraf(BOT_TOKEN);
+
+bot.start((ctx) => ctx.reply('Бот работает!'));
+bot.help((ctx) => ctx.reply('Отправьте /start'));
+bot.command('test', (ctx) => ctx.reply('Тест пройден'));
+
+bot.launch();
+console.log('Тестовый бот запущен');
+b83f29b40f8cee54c91eca8385400e88159c8cb1
