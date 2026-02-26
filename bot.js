@@ -1,4 +1,4 @@
-js
+'js
 const { Telegraf } = require('telegraf');
 const { invokeScript } = require('@waves/waves-transactions');
 const axios = require('axios');
