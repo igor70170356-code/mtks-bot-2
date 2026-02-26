@@ -1,37 +1,53 @@
-'js
 const { Telegraf } = require('telegraf');
 const { invokeScript } = require('@waves/waves-transactions');
 const axios = require('axios');
+const CONFIG = require('./config');
 
-// ========== ВАШИ ДАННЫЕ ==========
-const BOTTOKEN = '8447787179:AAG-CQc7pJ7NJScnavBCZJ9aFbCBaW80SbM';
-const CONTRACTID = '3PJYK94GQDFQdYfQqPTxtVVmSYBZPWtMmLN';
-const ROMEASSETID = 'AP4Cb5xLYGH6ZigHreCZHoXpQTWDkPsG2BHqfDUx6taJ';
-const NODEURL = 'https://nodes.wavesnodes.com';
-const ADMINSEED = 'guess coin visual burger identify ring submit unfold wisdom know trap easy used minute clinic';
-// ==================================
+// Валидация конфигурации
+CONFIG.validate();
 
-const bot = new Telegraf(BOTTOKEN);
+const bot = new Telegraf(CONFIG.BOT_TOKEN);
+
+// Логирование ошибок
+const logError = (context, error, details = {}) => {
+  console.error({
+    timestamp: new Date().toISOString(),
+    context,
+    error: error.message,
+    details,
+    stack: error.stack
+  });
+};
+
+// Парсинг суммы с валидацией
+const parseAmount = (input, minAmount) => {
+  const amount = parseFloat(input);
+  if (isNaN(amount) || amount < minAmount) {
+    throw new Error(Минимум ${minAmount});
+  }
+  return amount;
+};
 
 async function callContract(functionName, paymentAmount = 0) {
   const invokeParams = {
-    dApp: CONTRACTID,
+    dApp: CONFIG.CONTRACT_ID,
     call: {
       function: functionName,
       args: []
     },
     payment: paymentAmount > 0 ? [{
-      assetId: ROMEASSETID,
+      assetId: CONFIG.ROME_ASSET_ID,
       amount: paymentAmount
     }] : [],
     chainId: 'W'
   };
+
   try {
-    const signedTx = invokeScript(invokeParams, ADMINSEED);
-    const response = await axios.post(${NODEURL}/transactions/broadcast, signedTx);
+    const signedTx = invokeScript(invokeParams, CONFIG.ADMIN_SEED);
+    const response = await axios.post(${CONFIG.NODE_URL}/transactions/broadcast, signedTx);
     return response.data;
   } catch (error) {
-    console.error('Ошибка вызова контракта:', error.response ? error.response.data : error.message);
+    logError('callContract', error, { functionName, paymentAmount });
     throw error;
   }
 }
@@ -44,47 +60,85 @@ bot.start((ctx) => ctx.reply(
   '/help — помощь'
 ));
 
-// Обработка команды /price
 bot.command('price', async (ctx) => {
   try {
-    // Предположим, вызываем контракт для получения цен
-    const result = await callContract('getPrices');
-    ctx.reply(Текущие цены: ${result});
-  } catch (e) {
-    ctx.reply('Ошибка получения цен');
+    const url = ${CONFIG.NODE_URL}/addresses/data/${CONFIG.CONTRACT_ID};
+    const response = await axios.get(url);
+    const data = response.data;
+
+    let basePrice, buyPrice, sellPrice;
+
+    data.forEach(item => {
+      switch (item.key) {
+        case 'base_price':
+          basePrice = (item.value / CONFIG.DECIMAL_PRECISION).toFixed(6);
+          break;
+        case 'buy_price':
+          buyPrice = (item.value / CONFIG.DECIMAL_PRECISION).toFixed(6);
+          break;
+        case 'sell_price':
+          sellPrice = (item.value / CONFIG.DECIMAL_PRECISION).toFixed(6);
+          break;
+      }
+    });
+
+    // Проверка, что все цены получены
+    if (!basePrice  !buyPrice  !sellPrice) {
+      throw new Error('Не удалось получить актуальные цены');
+    }
+
+    await ctx.reply(
+      📊 Цены MTKS:\n\n +
+      💰 Покупка: ${buyPrice} Rome\n +
+      💸 Продажа: ${sellPrice} Rome\n +
+      📈 База: ${basePrice} Rome
+    );
+  } catch (error) {
+    logError('price_command', error, { userId: ctx.from.id });
+    await ctx.reply(❌ Ошибка: ${error.message});
   }
 });
 
-// Обработка команды /buy
 bot.command('buy', async (ctx) => {
-  const amountStr = ctx.message.text.split(' ')[1];
-  const amount = parseFloat(amountStr);
-  if (isNaN(amount) || amount <= 0) {
-    return ctx.reply('Некорректная сумма для покупки');
-  }
   try {
-    const result = await callContract('buy', Math.round(amount  1e8)); // пересчет в сатоши
-    ctx.reply(Покупка выполнена: ${result.id});
-  } catch (e) {
-    ctx.reply('Ошибка при покупке');
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+      return ctx.reply('❗ Укажите сумму в Rome\nПример: /buy 1.05');
+    }
+
+    const romeAmount = parseAmount(args[1], CONFIG.MIN_BUY_AMOUNT);
+    const amount = Math.round(romeAmount * CONFIG.DECIMAL_PRECISION);
+
+    await ctx.reply(⏳ Покупаю MTKS на ${romeAmount} Rome...);
+    const result = await callContract('buyMtks', amount);
+
+    await ctx.reply(
+      ✅ Успешно!\nТранзакция: https://wavesexplorer.com/tx/${result.id}
+    );
+  } catch (error) {
+    logError('buy_command', error, { userId: ctx.from.id });
+    await ctx.reply(❌ Ошибка: ${error.message});
   }
 });
 
-// Обработка команды /sell
 bot.command('sell', async (ctx) => {
-  const amountStr = ctx.message.text.split(' ')[1];
-  const amount = parseFloat(amountStr);
-  if (isNaN(amount) || amount <= 0) {
-    return ctx.reply('Некорректная сумма для продажи');
-  }
   try {
-    const result = await callContract('sell', Math.round(amount  1e8));
-    ctx.reply(Продажа выполнена: ${result.id});
-  } catch (e) {
-    ctx.reply('Ошибка при продаже');
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+      return ctx.reply('❗ Укажите количество MTKS\nПример: /sell 1');
+    }
+
+    const mtksAmount = parseAmount(args[1], 1.0);
+
+    await ctx.reply('⏳ Функция продажи скоро будет доступна');
+  } catch (error) {
+    logError('sell_command', error, { userId: ctx.from.id });
+    await ctx.reply(❌ Ошибка: ${error.message});
   }
 });
 
-bot.help((ctx) => ctx.reply('Доступные команды:\n/price — цены\n/buy [сумма] — купить\n/sell [сумма] — продать'));
-
-bot.launch();
+bot.help((ctx) => ctx.reply(
+  '📖 Помощь:\n\n' +
+  '/price — текущие цены\n' +
+  '/buy 1.05 — купить MTKS за Rome\n' +
+  '/sell 1 — продать MTKS за Rome\n\n' +
